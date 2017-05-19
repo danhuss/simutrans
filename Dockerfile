@@ -17,7 +17,7 @@ RUN mkdir /home/app && \
 		libbz2-dev \ 
 		libz-dev \ 
 		unzip && \
-    apt-get -y build-dep simutrans && \
+#    apt-get -y build-dep simutrans && \
     apt-get -y remove libsdl1.2-dev && \
 ##	used instead of COPY for building on docker for windows (carriage return issues)
 #	git clone https://github.com/danhuss/simutrans-server-docker.git && \ 
