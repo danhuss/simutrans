@@ -17,12 +17,13 @@ RUN mkdir /home/app && \
 		libbz2-dev \ 
 		libz-dev \ 
 		unzip && \
-#    apt-get -y build-dep simutrans && \
+    apt-get -y build-dep simutrans && \
     apt-get -y remove libsdl1.2-dev && \
-    rm -rf /var/lib/apt/lists/* && \ 
-	git clone https://github.com/danhuss/simutrans-server-docker.git
+##	used instead of COPY for building on docker for windows (carriage return issues)
+#	git clone https://github.com/danhuss/simutrans-server-docker.git && \ 
+    rm -rf /var/lib/apt/lists/* 
 
-# COPY . /simutrans-server-docker
+COPY . /simutrans-server-docker
 
 ##Compile the code
 RUN cd /simutrans-server-docker && \ 
@@ -32,13 +33,19 @@ RUN cd /simutrans-server-docker && \
 	make && \ 
 	mv simutrans / && \ 
 	mv sim /simutrans && \ 
+	mkdir /simutrans/save && \ 
 	chown app:app -R /simutrans
+
 	
-##Let's install a default pak and some default settings ./get_pak.sh
+##Let's install a default pak and some default settings 
+RUN cd / && \ 
+	curl -L -o simupak64.zip https://downloads.sourceforge.net/project/simutrans/pak64/120-2/simupak64-120-2.zip && \ 
+	unzip simupak64.zip && \
+	mv /simutrans-server-docker/serversave.sve /simutrans/save/
 	
 ##Cleanup
 RUN rm -rf /simutrans-server-docker && \ 
-	rm -rf /simutrans/config/simuconf.tab /simutrans/music/ /simutrans/script/ && \ 
+	rm -rf /simutrans/music/ /simutrans/script/ && \ 
 	strip /simutrans/sim && \ 
 	apt-get -y remove autoconf build-essential git libbz2-dev libz-dev && \ 
 	apt -y autoremove 
@@ -46,6 +53,6 @@ RUN rm -rf /simutrans-server-docker && \
 WORKDIR /simutrans
 USER app
 
-VOLUME ["/simutrans/pak", "/simutrans/config/simuconf.tab", "/simutrans/save/"]
-
-CMD ["./sim", "-server", "-singleuser", "-lang", "en", "-objects", "pak/", "-nosound", "-nomidi", "-noaddons"]
+VOLUME ["/simutrans/pak/", "/simutrans/config/", "/simutrans/save/"]
+ENTRYPOINT ["./sim", "-server","13353", "-singleuser", "-lang","en", "-objects","pak/", "-nosound", "-nomidi", "-noaddons", "-log","1", "-debug","3"]
+CMD ["-load","serversave.sve"]
