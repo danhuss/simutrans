@@ -186,7 +186,6 @@ public:
 protected:
 	uint32 sync_step; // when this has to be executed
 	uint32 map_counter; // cmd comes from world at this stage
-	// TODO: uint16 sub_step to have an order within one step
 };
 
 /**
@@ -355,6 +354,20 @@ private:
 	// compare default_param's (NULL pointers allowed)
 	// @return true if default_param are equal
 	static bool cmp_default_param(const char *d1, const char *d2);
+};
+
+/**
+* nwc_step_t
+* @from-server:
+*		@data contains the current sync_steps of the server
+*       defining the maximum sync_steps a client can advance to.
+*/
+class nwc_step_t : public network_world_command_t {
+public:
+	nwc_step_t() : network_world_command_t(NWC_STEP, 0, 0) { }
+	nwc_step_t(uint32 sync_steps, uint32 map_counter) : network_world_command_t(NWC_STEP, sync_steps, map_counter) {};
+	virtual bool execute(karte_t *) { return true;}
+	virtual const char* get_name() { return "nwc_step_t"; }
 };
 
 #endif
