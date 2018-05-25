@@ -1162,8 +1162,8 @@ DBG_DEBUG("karte_t::distribute_groundobjs_cities()","distributing groundobjs");
 						}
 						const climate_bits cl = neighbour_water ? water_climate_bit : (climate_bits)(1<<get_climate(k));
 						const groundobj_desc_t *desc = groundobj_t::random_groundobj_for_climate( cl, gr->get_grund_hang() );
+						queried = simrand(env_t::ground_object_probability*2-1);
 						if(desc) {
-							queried = simrand(env_t::ground_object_probability*2-1);
 							gr->obj_add( new groundobj_t( gr->get_pos(), desc ) );
 						}
 					}
@@ -1637,16 +1637,16 @@ void karte_t::init_height_to_climate()
 	for( int cl=0;  cl<MAX_CLIMATES-1;  cl++ ) {
 		if(climate_border[cl]>climate_border[arctic_climate]) {
 			// unused climate
-			climate_border[cl] = 0;
+			climate_border[cl] = groundwater-1;
 		}
 	}
 
 	// now arrange the remaining ones
-	for( int h=0;  h<32;  h++  ) {
+	for( uint h=0;  h<lengthof(height_to_climate);  h++  ) {
 		sint16 current_height = 999;	      // current maximum
 		sint16 current_cl = arctic_climate;	// and the climate
 		for( int cl=0;  cl<MAX_CLIMATES;  cl++ ) {
-			if(climate_border[cl] >= h+groundwater  &&  climate_border[cl] < current_height) {
+			if(  climate_border[cl] >= (sint16)h + groundwater  &&  climate_border[cl] < current_height  ) {
 				current_height = climate_border[cl];
 				current_cl = cl;
 			}
@@ -6748,8 +6748,13 @@ void karte_t::announce_server(int status)
 	// st=on&dns=server.com&port=13353&rev=1234&pak=pak128&name=some+name&time=3,1923&size=256,256&active=[0-16]&locked=[0-16]&clients=[0-16]&towns=15&citizens=3245&factories=33&convoys=56&stops=17
 	// (This is the data part of an HTTP POST)
 	if(  env_t::server_announce  ) {
+		// in easy_server mode, we assume the IP may change freuently and thus query it before each announce
 		cbuffer_t buf;
+		if(  env_t::easy_server  &&  status<2  &&  get_external_IP(buf)  ) {
+			env_t::server_dns = (const char *)buf;
+		}
 		// Always send dns and port as these are used as the unique identifier for the server
+		buf.clear();
 		buf.append( "&dns=" );
 		encode_URI( buf, env_t::server_dns.c_str() );
 		buf.printf( "&port=%u", env_t::server );

@@ -417,6 +417,7 @@ int simu_main(int argc, char** argv)
 			" -async              asynchronous images, only for SDL\n"
 			" -use_hw             hardware double buffering, only for SDL\n"
 			" -debug NUM          enables debugging (1..5)\n"
+			" -easyserver         set up every for server (query own IP, port forwarding)\n"
 			" -freeplay           play with endless money\n"
 			" -fullscreen         starts simutrans in fullscreen mode\n"
 			" -fps COUNT          framerate (from 5 to 100)\n"
@@ -673,19 +674,44 @@ int simu_main(int argc, char** argv)
 	}
 
 	// starting a server?
-	if(  gimme_arg(argc, argv, "-server", 0)  ) {
-		const char *p = gimme_arg(argc, argv, "-server", 1);
+	if(  gimme_arg(argc, argv, "-easyserver", 0)  ) {
+		const char *p = gimme_arg(argc, argv, "-easyserver", 1);
 		int portadress = p ? atoi( p ) : 13353;
-		if(  portadress==0  ) {
-			portadress = 13353;
+		if(  portadress!=0  ) {
+			env_t::server_port = portadress;
 		}
 		// will fail fatal on the opening routine ...
-		dbg->message( "simmain()", "Server started on port %i", portadress );
-		env_t::networkmode = network_init_server( portadress );
+		dbg->message( "simmain()", "Server started on port %i", env_t::server_port );
+		env_t::networkmode = network_init_server( env_t::server_port );
+		// query IP and try to open ports on router
+		char IP[256];
+		if(  prepare_for_server( IP, env_t::server_port )  ) {
+			// we have forwarded a port in router, so we can continue
+			env_t::server_dns = IP;
+			if(  env_t::server_name.empty()  ) {
+				env_t::server_name = std::string("Server at ")+IP;
+			}
+			env_t::server_announce = 1;
+			env_t::easy_server = 1;
+		}
 	}
-	else {
-		// no announce for clients ...
-		env_t::server_announce = 0;
+
+		// starting a server?
+	if(  !env_t::server  ) {
+		if(  gimme_arg(argc, argv, "-server", 0)  ) {
+			const char *p = gimme_arg(argc, argv, "-server", 1);
+			int portadress = p ? atoi( p ) : 13353;
+			if(  portadress!=0  ) {
+				env_t::server_port = portadress;
+			}
+			// will fail fatal on the opening routine ...
+			dbg->message( "simmain()", "Server started on port %i", env_t::server_port );
+			env_t::networkmode = network_init_server( env_t::server_port );
+		}
+		else {
+			// no announce for clients ...
+			env_t::server_announce = 0;
+		}
 	}
 
 	DBG_MESSAGE( "simmain::main()", "Version: " VERSION_NUMBER "  Date: " VERSION_DATE);
@@ -802,29 +828,29 @@ int simu_main(int argc, char** argv)
 	if(  const char *themestr = gimme_arg(argc, argv, "-theme", 1)  ) {
 		dr_chdir( env_t::user_dir );
 		dr_chdir( "themes" );
-		themes_ok = gui_theme_t::themes_init(themestr);
+		themes_ok = gui_theme_t::themes_init(themestr, true);
 		if(  !themes_ok  ) {
 			dr_chdir( env_t::program_dir );
 			dr_chdir( "themes" );
-			themes_ok = gui_theme_t::themes_init(themestr);
+			themes_ok = gui_theme_t::themes_init(themestr, true);
 		}
 	}
 	// next try the last used theme
 	if(  !themes_ok  &&  env_t::default_theme.c_str()!=NULL  ) {
 		dr_chdir( env_t::user_dir );
 		dr_chdir( "themes" );
-		themes_ok = gui_theme_t::themes_init( env_t::default_theme );
+		themes_ok = gui_theme_t::themes_init( env_t::default_theme, true );
 		if(  !themes_ok  ) {
 			dr_chdir( env_t::program_dir );
 			dr_chdir( "themes" );
-			themes_ok = gui_theme_t::themes_init( env_t::default_theme );
+			themes_ok = gui_theme_t::themes_init( env_t::default_theme, true );
 		}
 	}
 	// specified themes not found => try default themes
 	if(  !themes_ok  ) {
 		dr_chdir( env_t::program_dir );
 		dr_chdir( "themes" );
-		themes_ok = gui_theme_t::themes_init("themes.tab");
+		themes_ok = gui_theme_t::themes_init("themes.tab",true);
 	}
 	if(  !themes_ok  ) {
 		dbg->fatal( "simmain()", "No GUI themes found! Please re-install!" );
@@ -1364,6 +1390,7 @@ DBG_MESSAGE("simmain","loadgame file found at %s",buffer);
 	delete eventmanager;
 	eventmanager = 0;
 
+	remove_port_forwarding( env_t::server );
 	network_core_shutdown();
 
 	simgraph_exit();

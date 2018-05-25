@@ -15,10 +15,15 @@
 #include "../simsys.h"
 #include "../simworld.h"
 #include "../simversion.h"
+#include "../pathes.h"
+
 #include "../dataobj/loadsave.h"
 #include "../dataobj/translator.h"
 #include "../dataobj/environment.h"
-#include "../pathes.h"
+
+#include "../network/network.h"
+#include "../network/network_cmd.h"
+
 #include "../utils/simstring.h"
 
 
@@ -62,7 +67,48 @@ void sve_info_t::rdwr(loadsave_t *file)
 bool loadsave_frame_t::item_action(const char *filename)
 {
 	if(do_load) {
-		welt->load(filename);
+		// more effort to start a server
+		if(  easy_server.pressed  ) {
+			if(  env_t::server  ) {
+				// kill current session
+				welt->announce_server(2);
+				remove_port_forwarding( env_t::server );
+				network_core_shutdown();
+				if(  env_t::fps==15  ) {
+					env_t::fps = 25;
+				}
+			}
+			// now start a server with defaults
+			env_t::networkmode = network_init_server( env_t::server_port );
+			if(  env_t::networkmode  ) {
+				// query IP and try to open ports on router
+				char IP[256];
+				if(  prepare_for_server( IP, env_t::server_port )  ) {
+					// we have forwarded a port in router, so we can continue
+					env_t::server_dns = IP;
+					if(  env_t::server_name.empty()  ) {
+						env_t::server_name = std::string("Server at ")+IP;
+					}
+					env_t::server_announce = 1;
+					env_t::easy_server = 1;
+					if(  env_t::fps>15  ) {
+						env_t::fps = 15;
+					}
+				}
+			}
+			if(  !welt->load(filename)  ) {
+				// kill current session
+				welt->announce_server(2);
+				remove_port_forwarding( env_t::server );
+				network_core_shutdown();
+				if(  env_t::fps==15  ) {
+					env_t::fps = 25;
+				}
+			}
+		}
+		else {
+			welt->load(filename);
+		}
 	}
 	else {
 		welt->save( filename, loadsave_t::save_mode, env_t::savegame_version_str, false );
@@ -88,6 +134,8 @@ loadsave_frame_t::loadsave_frame_t(bool do_load) : savegame_frame_t(".sve",false
 
 	if(do_load) {
 		set_name(translator::translate("Laden"));
+		easy_server.init( button_t::square_automatic, "Start this as a server", scr_coord(D_MARGIN_LEFT,0) );
+		add_component(&easy_server);
 	}
 	else {
 		set_filename(welt->get_settings().get_filename());
@@ -128,6 +176,16 @@ loadsave_frame_t::loadsave_frame_t(bool do_load) : savegame_frame_t(".sve",false
 			dr_rename( SAVE_PATH_X "_load_cached.xml", SAVE_PATH_X "_cached.xml" );
 		}
 	}
+}
+
+
+/**
+ * need to shift the start server button to the lower left
+ */
+void loadsave_frame_t::set_windowsize(scr_size size)
+{
+	savegame_frame_t::set_windowsize(size);
+	easy_server.align_to(&savebutton, ALIGN_CENTER_V, scr_coord( 0, 0 ) );
 }
 
 

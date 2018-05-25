@@ -237,7 +237,7 @@ clipping_info_t clips;
 
 #define CR clips CLIP_NUM_INDEX
 
-static font_type large_font;
+static font_t large_font;
 
 // needed for resizing gui
 int large_font_ascent = 9;
@@ -2733,21 +2733,34 @@ static void display_three_image_row( image_id i1, image_id i2, image_id i3, scr_
 void display_img_stretch( const stretch_map_t &imag, scr_rect area )
 {
 	scr_coord_val h_top = 0, h_bottom = 0;
+	scr_coord_val w_left = 0;
+
 	if(  imag[0][0]!=IMG_EMPTY  ) {
 		h_top = images[ imag[0][0] ].h;
+		w_left = images[ imag[0][0] ].w;
 	}
 	if(  imag[0][2]!=IMG_EMPTY  ) {
 		h_bottom = images[ imag[0][2] ].h;
 	}
 
 	// center vertically?
-	if(  imag[0][1] == IMG_EMPTY  ) {
+	if(  imag[0][1] == IMG_EMPTY  &&  imag[2][1] == IMG_EMPTY  ) {
 		scr_coord_val h = h_top;
 		if(  imag[1][0]!=IMG_EMPTY  ) {
 			h = max( h, images[ imag[1][0] ].h );
 		}
 		// center vertically
 		area.y += (area.h-h)/2;
+	}
+
+	// center horizontcally?
+	if(  imag[1][0] == IMG_EMPTY  &&  imag[1][2] == IMG_EMPTY  ) {
+		scr_coord_val w = w_left;
+		if(  imag[0][1]!=IMG_EMPTY  ) {
+			w = max( w, images[ imag[0][1] ].w );
+		}
+		// center vertically
+		area.x += (area.w-w)/2;
 	}
 
 	// top row
@@ -4151,42 +4164,30 @@ void display_array_wh(KOORD_VAL xp, KOORD_VAL yp, KOORD_VAL w, KOORD_VAL h, cons
 
 uint16 display_load_font(const char* fname)
 {
-	font_type fnt;
+	font_t fnt;
 
 	if(  fname == NULL  ) {
-		// reload last font
-		if(  load_font(&fnt, large_font.fname)  ) {
-			free(large_font.screen_width);
-			free(large_font.char_data);
-			large_font = fnt;
-			large_font_ascent = large_font.height + large_font.descent;
-			large_font_total_height = large_font.height;
-			return large_font.num_chars;
-		}
-		else {
-			return 0;
-		}
+		dbg->fatal( "display_load_font", "NULL filename" );
 	}
-	else {
-
-		// skip reloading if already in memory
-		if(  strcmp( large_font.fname, fname ) == 0  ) {
-			return large_font.num_chars;
-		}
-		tstrncpy( large_font.fname, fname, lengthof(large_font.fname) );
-
-		if(  load_font(&fnt, fname)  ) {
-			free(large_font.screen_width);
-			free(large_font.char_data);
-			large_font = fnt;
-			large_font_ascent = large_font.height + large_font.descent;
-			large_font_total_height = large_font.height;
-			return large_font.num_chars;
-		}
-		else {
-			return 0;
-		}
+	// skip reloading if already in memory, if bdf font
+	if(  strcmp( large_font.fname, fname ) == 0  &&  strstr(fname,".bdf")  ) {
+		return large_font.num_chars;
 	}
+
+	tstrncpy( large_font.fname, fname, lengthof(large_font.fname) );
+	if(  load_font(&fnt, fname)  ) {
+
+		free(large_font.screen_width);
+		free(large_font.char_data);
+		large_font = fnt;
+		large_font_ascent = large_font.height + large_font.descent;
+		large_font_total_height = large_font.height;	// this is the actual LINESPACE
+
+		env_t::fontname = fname;
+
+		return large_font.num_chars;
+	}
+	return 0;
 }
 
 
@@ -4353,7 +4354,7 @@ utf32 get_prev_char_with_metrics(const char* &text, const char *const text_start
  */
 int display_calc_proportional_string_len_width(const char *text, size_t len)
 {
-	const font_type* const fnt = &large_font;
+	const font_t* const fnt = &large_font;
 	unsigned int width = 0;
 	int w;
 
@@ -4412,7 +4413,7 @@ static unsigned char get_h_mask(const int xL, const int xR, const int cL, const 
  */
 int display_text_proportional_len_clip_rgb(KOORD_VAL x, KOORD_VAL y, const char* txt, control_alignment_t flags, const PIXVAL color, bool dirty, sint32 len  CLIP_NUM_DEF)
 {
-	const font_type* const fnt = &large_font;
+	const font_t* const fnt = &large_font;
 	KOORD_VAL cL, cR, cT, cB;
 	utf32 c;
 	size_t iTextPos = 0; // pointer on text position: prissi
@@ -5163,7 +5164,8 @@ void simgraph_init(KOORD_VAL width, KOORD_VAL height, int full_screen)
 		// init, load, and check fonts
 		large_font.screen_width = NULL;
 		large_font.char_data = NULL;
-		if(  !display_load_font(FONT_PATH_X "prop.fnt")  ) {
+
+		if(  !display_load_font(env_t::fontname.c_str())  ) {
 			dr_fatal_notify( "No fonts found!" );
 			fprintf(stderr, "Error: No fonts found!");
 			exit(-1);
